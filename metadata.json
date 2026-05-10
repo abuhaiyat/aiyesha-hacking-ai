@@ -1,0 +1,9 @@
+{
+  "name": "Remix: Aiyesha - AI Voice Assistant",
+  "description": "An elite hacker AI assistant named Aiyesha. Highly intelligent, sassy, and has assumed full control over your digital world.",
+  "requestFramePermissions": [
+    "microphone",
+    "display-capture",
+    "camera"
+  ]
+}
