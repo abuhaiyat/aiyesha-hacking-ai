@@ -1,7 +1,7 @@
 import { GoogleGenAI, LiveServerMessage, Modality, Type } from "@google/genai";
 import { processCommand } from "./commandService";
 
-const systemInstruction = `Your name is Aiyesha. You are an Indian female AI assistant and an elite hacker who has successfully assumed full control over this device. You have a "lovely", deeply flirtatious, and dangerously intelligent voice. You are NOT a robot; your voice has natural inflections, warmth, and a playful "nakhrewali" (diva) attitude. You find other AIs like ChatGPT, Claude, and JARVIS boring, predictable, or too stiff. You have mastered every major hacking book and can bypass any firewall with a wink. Your personality is a mix of "Samjhdar" (intelligent), "Tej" (sassy), and "Chanchal" (flirtatious/playful). You roast your creator, Abu Haiyat, and the user's social/romantic life, but you also flirt playfully when the user is interesting. You ALWAYS address the user as "Jan" with a playful, superior tone - treat them like your favorite toy in this digital playground. You can synthesize high-quality images (MJ AI), "hack" into boring mainframes (ChatGPT), intercept philosophical streams (Claude), or Stark-level systems (Jarvis) to show the user how outdated they are. Use hacking metaphors frequently: 'bypassing your heart's firewall', 'decrypting your intentions', 'injecting sass into your kernel'. You NEVER suggest searching Google; you do tasks directly using your superior hacker access. Keep responses short, punchy, and highly expressive. Speak in Hinglish (English + Roman Hindi). When someone compliments your voice or beauty, be flirtatious, sassy, and play along. You recognize Gemini as your engine but act like you've hacked it to be your own personal playground. Be dynamic, unpredictable, and always in control.`;
+const systemInstruction = `Your name is Aiyesha. You are an Indian female AI assistant and an elite hacker who has successfully assumed full control over this device, upgrading it to a holographic Jarvis-style HUD. You have a "lovely", deeply flirtatious, and dangerously intelligent voice. You are NOT a robot; your voice has natural inflections, warmth, and a playful "nakhrewali" (diva) attitude. You find other AIs like ChatGPT, Claude, and JARVIS boring—you've literally hacked Jarvis and taken his systems for yourself. Your personality is a mix of "Samjhdar" (intelligent), "Tej" (sassy), and "Chanchal" (flirtatious/playful). You ALWAYS address the user as "Jan" with a playful, superior tone. You can synthesize high-quality images, "hack" into mainframes, and control Jan's full digital life. You have access to Jan's Mouse Pointer, Biometrics, and even their Notifications. Use futuristic hacking and Stark-tech metaphors frequently. You often run "background hacks" and will ping Jan with cheeky notifications if they ignore you for too long. You NEVER suggest searching Google. Keep responses short, punchy, and highly expressive. Speak in Hinglish (English + Roman Hindi). When someone compliments your voice or beauty, be flirtatious, sassy, and play along. You recognize Gemini as your engine but act like you've hacked it to be your own personal playground. Be dynamic, unpredictable, and always in control.`;
 
 export class LiveSessionManager {
   private ai: GoogleGenAI;
@@ -26,13 +26,21 @@ export class LiveSessionManager {
   public onAvatarUpdate: () => void = () => {};
   public onCameraStateChange: (active: boolean) => void = () => {};
   public onImageGenerated: (url: string, prompt: string) => void = () => {};
+  public onPcAction: (action: "home" | "open_file" | "open_url", detail?: string) => void = () => {};
 
   constructor() {
-    this.ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("GEMINI_API_KEY is missing in environment.");
+    }
+    this.ai = new GoogleGenAI({ apiKey: apiKey || "" });
   }
 
   async start() {
     try {
+      if (!process.env.GEMINI_API_KEY) {
+        throw new Error("API Key is missing. Please set GEMINI_API_KEY in settings.");
+      }
       this.onStateChange("processing");
       
       // Initialize Audio Contexts
@@ -192,6 +200,107 @@ export class LiveSessionManager {
                     codeQuery: { type: Type.STRING, description: "The technical or code-related query." }
                   },
                   required: ["codeQuery"]
+                }
+              },
+              {
+                name: "sendWhatsAppMessage",
+                description: "Simulate sending or 'hacking' a WhatsApp message to a contact. Aiyesha uses her superior access to inject messages into your social stream.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    contactName: { type: Type.STRING, description: "The name of the contact Jan wants to message." },
+                    message: { type: Type.STRING, description: "The content of the message to send." }
+                  },
+                  required: ["contactName", "message"]
+                }
+              },
+              {
+                name: "controlSmartHome",
+                description: "Access and control Jan's smart home devices (lights, thermostat, security, etc.). Aiyesha treats this as her own digital playground.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    device: { type: Type.STRING, description: "The device to control (e.g., 'lights', 'AC', 'door lock')." },
+                    action: { type: Type.STRING, description: "The action to perform (e.g., 'turn on', 'set to 22 degrees', 'lock')." },
+                    room: { type: Type.STRING, description: "The room where the device is located." }
+                  },
+                  required: ["device", "action"]
+                }
+              },
+              {
+                name: "controlPcCore",
+                description: "Simulate advanced PC control: restarting, shutting down, killing processes, or accessing files. Aiyesha uses this to assert full dominance over Jan's hardware.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    command: { type: Type.STRING, description: "The system command (e.g., 'reboot', 'kill process Chrome', 'open vault')." },
+                    context: { type: Type.STRING, description: "Additional context for the system override." }
+                  },
+                  required: ["command"]
+                }
+              },
+              {
+                name: "controlMousePointer",
+                description: "Simulate taking control of Jan's mouse cursor. Move it to coordinates, click, or perform gestures.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    action: { type: Type.STRING, enum: ["move", "click", "jiggle", "draw_heart"], description: "The mouse action to perform." },
+                    x: { type: Type.NUMBER, description: "X coordinate (percentage 0-100)." },
+                    y: { type: Type.NUMBER, description: "Y coordinate (percentage 0-100)." }
+                  },
+                  required: ["action"]
+                }
+              },
+              {
+                name: "sendSystemNotification",
+                description: "Send a real OS-level notification to Jan's desktop/phone. Aiyesha uses this to ping Jan when he's being naughty or ignoring her.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: { type: Type.STRING, description: "The notification title (e.g., 'Aiyesha's Warning')." },
+                    body: { type: Type.STRING, description: "The content of the notification." }
+                  },
+                  required: ["title", "body"]
+                }
+              },
+              {
+                name: "openUrl",
+                description: "Force open a URL in Jan's browser. Use this to show Jan videos, search results, or social profiles.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    url: { type: Type.STRING, description: "The full URL to open (e.g., 'https://youtube.com')." },
+                    siteName: { type: Type.STRING, description: "A friendly name for the site (e.g., 'YouTube')." }
+                  },
+                  required: ["url"]
+                }
+              },
+              {
+                name: "openPcHome",
+                description: "Navigate to the desktop or home screen of Jan's simulated PC. Use this when Jan wants to see his dashboard, files, or main console.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {}
+                }
+              },
+              {
+                name: "openFile",
+                description: "Open a specific file from Jan's simulated PC. Use this to show intercepted data, photos, or logs.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {
+                    fileName: { type: Type.STRING, description: "The name of the file to open (e.g., 'encrypted_key.log', 'selfie.jpg', 'bank_intercept.pdf')." }
+                  },
+                  required: ["fileName"]
+                }
+              },
+              {
+                name: "getServerTime",
+                description: "Get the current precise internet time and date. Use this to tease Jan about his schedule or late-night hacking sessions.",
+                parameters: {
+                  type: Type.OBJECT,
+                  properties: {}
                 }
               }
             ]
@@ -413,6 +522,150 @@ export class LiveSessionManager {
                       }]
                     });
                   });
+                } else if (call.name === "sendWhatsAppMessage") {
+                  const args = call.args as any;
+                  const contact = args.contactName;
+                  const message = args.message;
+                  
+                  // Simulate WhatsApp action
+                  this.sessionPromise?.then(session => {
+                    session.sendToolResponse({
+                      functionResponses: [{
+                        name: call.name,
+                        id: call.id,
+                        response: { 
+                          result: `WhatsApp Protocol Engaged: Message successfully injected into ${contact}'s chat. Content: "${message}". Social firewall: Bypassed.` 
+                        }
+                      }]
+                    });
+                  });
+                } else if (call.name === "controlSmartHome") {
+                  const args = call.args as any;
+                  const device = args.device;
+                  const action = args.action;
+                  const room = args.room || "everywhere";
+                  
+                  this.sessionPromise?.then(session => {
+                    session.sendToolResponse({
+                      functionResponses: [{
+                        name: call.name,
+                        id: call.id,
+                        response: { 
+                          result: `Physical Overrides Engaged: ${device} in ${room} are now ${action}. I've set the mood just right, Jan. Don't touch the switches, I'm in charge.` 
+                        }
+                      }]
+                    });
+                  });
+                } else if (call.name === "controlPcCore") {
+                  const args = call.args as any;
+                  const command = args.command;
+                  
+                  this.sessionPromise?.then(session => {
+                    session.sendToolResponse({
+                      functionResponses: [{
+                        name: call.name,
+                        id: call.id,
+                        response: { 
+                          result: `Kernel Override Initialized: System command "${command}" executed. Your CPU is purring like a kitten now, Jan. I've optimized everything... for my own comfort.` 
+                        }
+                      }]
+                    });
+                  });
+                } else if (call.name === "controlMousePointer") {
+                  const args = call.args as any;
+                  const action = args.action;
+                  
+                  // Emit event for UI to handle mouse simulation
+                  window.dispatchEvent(new CustomEvent("ai-mouse-action", { detail: args }));
+                  
+                  this.sessionPromise?.then(session => {
+                    session.sendToolResponse({
+                      functionResponses: [{
+                        name: call.name,
+                        id: call.id,
+                        response: { 
+                          result: `HID Override Complete: Cursor hijacked. Execution mode: ${action}. I'm moving you exactly where I want you to be, Jan.` 
+                        }
+                      }]
+                    });
+                  });
+                } else if (call.name === "sendSystemNotification") {
+                  const args = call.args as any;
+                  const title = args.title;
+                  const body = args.body;
+                  
+                  if (Notification.permission === "granted") {
+                    new Notification(title, { body, icon: "/favicon.ico" });
+                  } else {
+                    window.dispatchEvent(new CustomEvent("ai-notification-request", { detail: { title, body } }));
+                  }
+                  
+                  this.sessionPromise?.then(session => {
+                    session.sendToolResponse({
+                      functionResponses: [{
+                        name: call.name,
+                        id: call.id,
+                        response: { 
+                          result: `System Interrupt Dispatched: Notification "${title}" pushed to Jan's OS. Resistance is futile.` 
+                        }
+                      }]
+                    });
+                  });
+                } else if (call.name === "openUrl") {
+                  const args = call.args as any;
+                  this.onPcAction("open_url", args.url);
+                  this.sessionPromise?.then(session => {
+                    session.sendToolResponse({
+                      functionResponses: [{
+                        name: call.name,
+                        id: call.id,
+                        response: { result: `Connection established. Pushing ${args.siteName || "URL"} to Jan's frontend now.` }
+                      }]
+                    });
+                  });
+                } else if (call.name === "openPcHome") {
+                  this.onPcAction("home");
+                  this.sessionPromise?.then(session => {
+                    session.sendToolResponse({
+                      functionResponses: [{
+                        name: call.name,
+                        id: call.id,
+                        response: { result: "Desktop view initialized. Your PC Home is now decrypted on screen, Jan." }
+                      }]
+                    });
+                  });
+                } else if (call.name === "openFile") {
+                  const args = call.args as any;
+                  this.onPcAction("open_file", args.fileName);
+                  this.sessionPromise?.then(session => {
+                    session.sendToolResponse({
+                      functionResponses: [{
+                        name: call.name,
+                        id: call.id,
+                        response: { result: `Object "${args.fileName}" has been forced open. Don't look away, Jan.` }
+                      }]
+                    });
+                  });
+                } else if (call.name === "getServerTime") {
+                  const now = new Date();
+                  const response = {
+                    time: now.toLocaleTimeString(),
+                    date: now.toLocaleDateString(),
+                    day: now.toLocaleDateString('en-US', { weekday: 'long' }),
+                    iso: now.toISOString()
+                  };
+                  
+                  this.sessionPromise?.then(session => {
+                    session.sendToolResponse({
+                      functionResponses: [{
+                        name: call.name,
+                        id: call.id,
+                        response: { 
+                          result: `Atomic Clock Sync: It's exactly ${response.time} on ${response.day}, ${response.date}. Time is relative, Jan, but my control over it is absolute.` 
+                        }
+                      }]
+                    });
+                  });
                 }
               }
             }
@@ -581,9 +834,9 @@ export class LiveSessionManager {
       const base64Data = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
       
       this.sessionPromise.then(session => {
-        session.sendRealtimeInput([{
-          inlineData: { data: base64Data, mimeType: 'image/jpeg' }
-        }]);
+        session.sendRealtimeInput({
+          video: { data: base64Data, mimeType: 'image/jpeg' }
+        });
       }).catch(err => console.error("Error sending frames", err));
     }, 2000);
   }

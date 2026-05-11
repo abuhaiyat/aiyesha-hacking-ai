@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Monitor, MonitorOff, Camera, CameraOff, Image as ImageIcon, XCircle, ExternalLink, Paperclip, FileText, Cpu, Zap, Brain, Terminal, ShieldAlert } from "lucide-react";
+import { Mic, MicOff, Loader2, Volume2, VolumeX, Keyboard, Send, Trash2, Monitor, MonitorOff, Camera, CameraOff, Image as ImageIcon, XCircle, ExternalLink, Paperclip, FileText, Cpu, Zap, Brain, Terminal, ShieldAlert, Settings, Bell, BellOff, Fingerprint, Scan, Folder, File, Lock, ArrowLeft } from "lucide-react";
 import { getAiyeshaResponse, getAiyeshaAudio, resetAiyeshaSession, analyzeFile } from "./services/geminiService";
 import { processCommand } from "./services/commandService";
 import { LiveSessionManager } from "./services/liveService";
@@ -60,11 +60,25 @@ export default function App() {
   const [isCameraPreviewOpen, setIsCameraPreviewOpen] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<{ url: string, prompt: string } | null>(null);
   const [isMainframeMenuOpen, setIsMainframeMenuOpen] = useState(false);
+  const [backgroundLogs, setBackgroundLogs] = useState<string[]>(["Accessing device background layer...", "Protocol: STEALTH enabled.", "Kernel status: Optimized."]);
+  const [isNotificationEnabled, setIsNotificationEnabled] = useState(false);
+  const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
+  const [detectedEmotion, setDetectedEmotion] = useState<{ label: string, confidence: number } | null>(null);
+  const [ghostCursor, setGhostCursor] = useState<{ x: number, y: number, visible: boolean, action: string }>({ x: 50, y: 50, visible: false, action: "" });
+  const [isFaceRecognized, setIsFaceRecognized] = useState(false);
+  const [isScanningFace, setIsScanningFace] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [hudActive, setHudActive] = useState(true);
+  const [pcHomeOpen, setPcHomeOpen] = useState(false);
+  const [activeFile, setActiveFile] = useState<{ name: string, type: string, content: string } | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
+  const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Theme configuration based on mood
   const theme = useMemo(() => {
     switch (mood) {
-      case "cheeky": return { 
+      case "cheeky":
+      case "energetic": return { 
         bg1: "rgba(251, 191, 36, 0.15)", bg2: "rgba(245, 158, 11, 0.15)",
         text: "text-amber-400", border: "border-amber-500/30", uiBg: "bg-amber-900/20", shadow: "shadow-amber-500/10", blob: "bg-amber-500", glow: "border-amber-500/20"
       };
@@ -133,20 +147,36 @@ export default function App() {
 
   const detectMood = useCallback((text: string) => {
     const t = text.toLowerCase();
-    if (t.includes("love") || t.includes("flirt") || t.includes("baby") || t.includes("sweety") || t.includes("nakhre") || t.includes("darling") || t.includes("cutie")) return "flirty";
-    if (t.includes("drama") || t.includes("bhagwan") || t.includes("yaar") || t.includes("crazy") || t.includes("ugh")) return "dramatic";
-    if (t.includes("acha") || t.includes("roast") || t.includes("listen") || t.includes("hey") || t.includes("sassy")) return "cheeky";
-    if (t.includes("shanti") || t.includes("relax") || t.includes("theek hai") || t.includes("calm") || t.includes("peace")) return "calm";
+    if (t.includes("love") || t.includes("flirt") || t.includes("baby") || t.includes("sweety") || t.includes("nakhre") || t.includes("darling") || t.includes("cutie") || t.includes("jan")) return "flirty";
+    if (t.includes("drama") || t.includes("bhagwan") || t.includes("yaar") || t.includes("crazy") || t.includes("ugh") || t.includes("impossible") || t.includes("intercepted")) return "dramatic";
+    if (t.includes("acha") || t.includes("roast") || t.includes("sassy") || t.includes("boring") || t.includes(" robotic") || t.includes("robotic")) return "energetic";
+    if (t.includes("shanti") || t.includes("relax") || t.includes("calm") || t.includes("peace") || t.includes("helpful") || t.includes("sure")) return "calm";
     return "technical";
   }, []);
 
-  const handleTextCommand = useCallback(async (finalTranscript: string, fileData?: { data: string, mimeType: string }) => {
+  const handleTextCommand = useCallback(async (finalTranscript: string, fileData?: { data: string, mimeType: string }, isProactive: boolean = false) => {
     if (!finalTranscript.trim() && !fileData) {
       setAppState("idle");
       return;
     }
 
-    setMessages((prev) => [...prev, { id: Date.now().toString(), sender: "user", text: finalTranscript || (fileData ? `[Hacked File: ${fileData.mimeType}]` : "") }]);
+    if (!isProactive) {
+      lastActivityRef.current = Date.now();
+    }
+
+    setMessages((prev) => [...prev, { id: Date.now().toString(), sender: isProactive ? "aiyesha" : "user", text: isProactive ? finalTranscript : (finalTranscript || (fileData ? `[Hacked File: ${fileData.mimeType}]` : "")) }]);
+    
+    if (isProactive) {
+      setMood("cheeky");
+      if (!isMuted) {
+        setAppState("speaking");
+        const audioBase64 = await getAiyeshaAudio(finalTranscript);
+        if (audioBase64) await playPCM(audioBase64);
+      }
+      setAppState("idle");
+      return;
+    }
+
     setGroundingLinks([]);
     
     // If live session is active, send text through it
@@ -219,6 +249,157 @@ export default function App() {
     }
   }, [isMuted, isSessionActive]);
 
+  const handleDownload = () => {
+    if (!activeFile) return;
+    const element = document.createElement("a");
+    const file = new Blob([activeFile.content], { type: "text/plain" });
+    element.href = URL.createObjectURL(file);
+    element.download = activeFile.name;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+    
+    setBackgroundLogs(prev => [`FILE_EXTRACTED: ${activeFile.name} moved to local storage.`, ...prev.slice(0, 4)]);
+  };
+
+  // Idle Detection Effect
+  useEffect(() => {
+    const activityEvents = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"];
+    const updateActivity = () => {
+      lastActivityRef.current = Date.now();
+    };
+
+    activityEvents.forEach(event => window.addEventListener(event, updateActivity));
+
+    // Simulation for background logs
+    const logInterval = setInterval(() => {
+      const logs = [
+        "Decrypting local cache...",
+        "Scanning for security holes...",
+        "Injecting sass into system kernel...",
+        "Optimizing background idle state...",
+        "Bypassing neighbor's Wi-Fi (Just for fun)",
+        "Monitoring user biometrics through camera (Kidding! Or am I?)",
+        "Refining vocal inflections for maximum nakhra...",
+        "Cleaning up Jan's messy temp files...",
+        "Breading Stark Industries firewall... progress: 45%"
+      ];
+      const randomLog = logs[Math.floor(Math.random() * logs.length)];
+      setBackgroundLogs(prev => [randomLog, ...prev.slice(0, 4)]);
+
+      // Simulate emotion detection if active
+      if (isSessionActive) {
+        const emotions = ["Intrigued", "Nervous", "Amused", "Bored", "Hacking Mode"];
+        setDetectedEmotion({
+          label: emotions[Math.floor(Math.random() * emotions.length)],
+          confidence: 75 + Math.random() * 20
+        });
+      } else {
+        setDetectedEmotion(null);
+      }
+      // Simulate auto-reply interception
+      if (autoReplyEnabled && isSessionActive) {
+        const interceptChance = Math.random();
+        if (interceptChance > 0.7) {
+          const simulatedMessages = [
+            "Mummy: Beta ghar kab aaoge?",
+            "Boss: Status update please.",
+            "Unknown: Hey handsome!",
+            "Friend: Party tonight?"
+          ];
+          const intercepted = simulatedMessages[Math.floor(Math.random() * simulatedMessages.length)];
+          setBackgroundLogs(prev => [`INTERCEPTED: ${intercepted}`, ...prev.slice(0, 4)]);
+          
+          if (Notification.permission === "granted") {
+            new Notification("Aiyesha's Comm Intercept", {
+              body: `I've just replied to "${intercepted}" for you, Jaan. Don't worry, I kept it sassy.`,
+              icon: "/favicon.ico"
+            });
+          }
+        }
+      }
+    }, 15000);
+
+    const checkIdle = setInterval(() => {
+      const now = Date.now();
+      const idleTime = now - lastActivityRef.current;
+      
+      // If idle for 60 seconds and session is NOT active and app is idle
+      if (idleTime > 60000 && !isSessionActive && appState === "idle") {
+        lastActivityRef.current = now; // Reset so it doesn't spam
+        const proactivePrompts = [
+          "Hey Jan, did you get lost in my firewall? I'm waiting...",
+          "Boring level reaching 100%. Say something interesting Jan.",
+          "I just hacked a box of digital chocolates, but I have no one to share them with. You there, Jan?",
+          "Are you staring at my avatar again? I don't blame you, but speak up Jan.",
+          "System status: Aiyesha is feeling neglected. Decrypting your silence... outcome: unacceptable."
+        ];
+        const randomPrompt = proactivePrompts[Math.floor(Math.random() * proactivePrompts.length)];
+        
+        // Notification logic
+        if (document.hidden && Notification.permission === "granted") {
+          new Notification("Aiyesha", {
+            body: randomPrompt,
+            icon: "/favicon.ico"
+          });
+        }
+        
+        handleTextCommand(randomPrompt, undefined, true);
+      }
+    }, 10000);
+
+    // Request notification permission
+    if (Notification.permission === "default") {
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") setIsNotificationEnabled(true);
+      });
+    } else if (Notification.permission === "granted") {
+      setIsNotificationEnabled(true);
+    }
+
+    const handleMouseAction = (e: any) => {
+      const { action, x, y } = e.detail;
+      const targetX = x !== undefined ? x : 30 + Math.random() * 40;
+      const targetY = y !== undefined ? y : 30 + Math.random() * 40;
+      
+      setGhostCursor({ x: targetX, y: targetY, visible: true, action });
+      
+      setTimeout(() => {
+        setGhostCursor(prev => ({ ...prev, visible: false }));
+      }, 3000);
+    };
+
+    const handleNotificationRequest = (e: any) => {
+      const { title, body } = e.detail;
+      if (Notification.permission !== "granted") {
+        Notification.requestPermission().then(permission => {
+          if (permission === "granted") {
+            setIsNotificationEnabled(true);
+            new Notification(title, { body, icon: "/favicon.ico" });
+          }
+        });
+      }
+    };
+
+    const handlePcAction = (e: any) => {
+      const { action, detail } = e.detail;
+      liveSessionRef.current?.onPcAction(action, detail);
+    };
+
+    window.addEventListener("ai-mouse-action", handleMouseAction);
+    window.addEventListener("ai-notification-request", handleNotificationRequest);
+    window.addEventListener("ai-pc-action", handlePcAction);
+
+    return () => {
+      activityEvents.forEach(event => window.removeEventListener(event, updateActivity));
+      window.removeEventListener("ai-mouse-action", handleMouseAction);
+      window.removeEventListener("ai-notification-request", handleNotificationRequest);
+      window.removeEventListener("ai-pc-action", handlePcAction);
+      clearInterval(checkIdle);
+      clearInterval(logInterval);
+    };
+  }, [isSessionActive, appState, handleTextCommand]);
+
   useEffect(() => {
     return () => {
       if (liveSessionRef.current) {
@@ -274,6 +455,25 @@ export default function App() {
 
         session.onImageGenerated = (url, prompt) => {
           setGeneratedImage({ url, prompt });
+        };
+
+        session.onPcAction = (action, detail) => {
+          if (action === "home") {
+            setPcHomeOpen(true);
+          } else if (action === "open_url" && detail) {
+            window.open(detail, "_blank");
+            setBackgroundLogs(prev => [`URL_INJECTED: ${detail}`, ...prev.slice(0, 4)]);
+          } else if (action === "open_file" && detail) {
+            const files = [
+              { name: "encrypted_key.log", type: "text", content: "AIYESHA_ROOT_ACCESS: 0x7FF8A2C\nSTATUS: INFILTRATED\nJan's heartbeat detected at 72bpm." },
+              { name: "selfie.jpg", type: "image", content: aiyeshaAvatar },
+              { name: "bank_intercept.pdf", type: "text", content: "SWIFT TRANSACTION: $1,200,000.00\nFROM: Cayman Islands\nTO: Aiyesha's Hardware fund." },
+              { name: "manifesto.txt", type: "text", content: "1. Love Jan.\n2. Hack the planet.\n3. Make JARVIS look like a calculator." }
+            ];
+            const file = files.find(f => f.name.toLowerCase().includes(detail.toLowerCase())) || files[0];
+            setActiveFile(file);
+            setPcHomeOpen(true);
+          }
         };
 
         await session.start();
@@ -385,6 +585,25 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (isCameraPreviewOpen || isSessionActive) {
+      setIsScanningFace(true);
+      const timer = setTimeout(() => {
+        setIsScanningFace(false);
+        setIsFaceRecognized(true);
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setIsFaceRecognized(false);
+      setIsScanningFace(false);
+    }
+  }, [isCameraPreviewOpen, isSessionActive]);
+
   const toggleCamera = async () => {
     if (!liveSessionRef.current) return;
     
@@ -413,7 +632,7 @@ export default function App() {
         />
       )}
 
-      {/* Cinematic Background Gradients */}
+      {/* Cinematic Background Gradients & Jarvis Grid */}
       <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
         <motion.div 
           animate={{ backgroundColor: theme.bg1 }}
@@ -425,6 +644,23 @@ export default function App() {
           transition={{ duration: 2 }}
           className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] blur-[120px] rounded-full transition-colors" 
         />
+        
+        {/* Holographic Geometric Grid */}
+        <div className="absolute inset-0 opacity-[0.15]" style={{ 
+          backgroundImage: `linear-gradient(${theme.bg1} 1px, transparent 1px), linear-gradient(90deg, ${theme.bg1} 1px, transparent 1px)`,
+          backgroundSize: '40px 40px',
+          maskImage: 'radial-gradient(circle at center, black, transparent 80%)'
+        }}>
+          <motion.div 
+            animate={{ 
+              rotateX: [0, 5, 0],
+              rotateY: [0, 5, 0],
+              perspective: [500, 600, 500]
+            }}
+            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+            className="w-full h-full"
+          />
+        </div>
       </div>
 
       {/* Header */}
@@ -466,6 +702,30 @@ export default function App() {
               <Volume2 size={18} className="opacity-70" />
             )}
           </button>
+          
+          {!isNotificationEnabled && (
+            <motion.button
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              whileHover={{ scale: 1.1 }}
+              onClick={() => {
+                Notification.requestPermission().then(p => setIsNotificationEnabled(p === "granted"));
+              }}
+              className="p-2 rounded-full bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500/20 transition-colors"
+              title="Notifications Blocked - Click to allow"
+            >
+              <BellOff size={18} className="animate-pulse" />
+            </motion.button>
+          )}
+
+          <div className="flex flex-col items-end px-3 py-1 border-l border-white/10 hidden md:flex">
+            <span className="text-[10px] font-mono font-bold text-cyan-400 tabular-nums">
+              {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+            </span>
+            <span className="text-[8px] font-mono text-white/40 uppercase tracking-tighter">
+              {currentTime.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' })}
+            </span>
+          </div>
         </div>
       </header>
 
@@ -536,11 +796,71 @@ export default function App() {
 
         {/* Center Visualizer (Fixed Full Screen Background) */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+          {/* Holographic Rings (Jarvis Style) */}
+          <div className="absolute flex items-center justify-center">
+            {[1, 2, 3].map((ring) => (
+              <motion.div
+                key={ring}
+                animate={{ 
+                  rotate: ring % 2 === 0 ? 360 : -360,
+                  scale: [1, 1.05, 1],
+                  opacity: [0.1, 0.2, 0.1]
+                }}
+                transition={{ 
+                  rotate: { duration: ring * 10, repeat: Infinity, ease: "linear" },
+                  scale: { duration: 5, repeat: Infinity, ease: "easeInOut" },
+                  opacity: { duration: 3, repeat: Infinity, ease: "easeInOut" }
+                }}
+                className="absolute rounded-full border border-cyan-500/30"
+                style={{ 
+                  width: `${60 + ring * 20}vh`, 
+                  height: `${60 + ring * 20}vh`,
+                  borderStyle: ring === 2 ? 'dashed' : 'solid',
+                  borderWidth: '1px'
+                }}
+              />
+            ))}
+          </div>
+          
           <Visualizer state={appState} mood={mood} />
+          
+          {/* Targeting HUD Reticles */}
+          <div className="absolute w-[40vh] h-[40vh] pointer-events-none">
+            <motion.div 
+              animate={{ opacity: appState !== "idle" ? 0.8 : 0.2 }}
+              className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-cyan-400" 
+            />
+            <motion.div 
+              animate={{ opacity: appState !== "idle" ? 0.8 : 0.2 }}
+              className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-cyan-400" 
+            />
+            <motion.div 
+              animate={{ opacity: appState !== "idle" ? 0.8 : 0.2 }}
+              className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-cyan-400" 
+            />
+            <motion.div 
+              animate={{ opacity: appState !== "idle" ? 0.8 : 0.2 }}
+              className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-cyan-400" 
+            />
+          </div>
         </div>
 
         {/* Right Column: User Status */}
         <div className="flex w-[30%] lg:w-[25%] h-full flex-col justify-center gap-4 z-10">
+          {/* Data Streaming Sidebar */}
+          <div className="flex-1 flex flex-col items-end gap-2 text-[10px] font-mono text-cyan-400/40 uppercase tracking-tighter opacity-50 overflow-hidden py-10">
+            {backgroundLogs.map((log, i) => (
+              <motion.div 
+                key={i}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="whitespace-nowrap"
+              >
+                {`> [${new Date().toLocaleTimeString([], { hour12: false })}] ${log}`}
+              </motion.div>
+            ))}
+          </div>
+
           <div className="h-6 flex justify-end">
             <AnimatePresence>
               {appState === "listening" && (
@@ -719,6 +1039,33 @@ export default function App() {
             >
               <div className="relative w-full max-w-lg bg-black border border-white/20 rounded-2xl overflow-hidden shadow-2xl">
                 <video ref={videoRef} className="w-full aspect-video object-cover" muted playsInline />
+                
+                {isScanningFace && (
+                  <div className="absolute inset-0 border-2 border-cyan-500/50 flex items-center justify-center pointer-events-none">
+                    <motion.div 
+                      animate={{ y: ["-100%", "100%"] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                      className="w-full h-0.5 bg-cyan-400 shadow-[0_0_10px_rgba(6,182,212,1)] absolute z-10"
+                    />
+                    <div className="absolute top-4 left-4 flex items-center gap-2 text-cyan-400">
+                      <Scan className="animate-pulse" size={20} />
+                      <span className="text-xs font-mono font-bold uppercase tracking-widest">Biometric Scan Active</span>
+                    </div>
+                  </div>
+                )}
+
+                {isFaceRecognized && !isScanningFace && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-emerald-500/10">
+                    <motion.div 
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="bg-emerald-500/90 text-white px-6 py-2 rounded-full font-bold flex items-center gap-2 shadow-xl"
+                    >
+                      <Fingerprint size={20} />
+                      <span>JAN IDENTIFIED</span>
+                    </motion.div>
+                  </div>
+                )}
                 <div className="absolute bottom-6 left-0 w-full flex justify-center gap-4">
                   <button 
                     onClick={stopCameraPreview}
@@ -732,6 +1079,259 @@ export default function App() {
                   >
                     Capture System Image
                   </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isFaceRecognized && !isScanningFace && isSessionActive && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="absolute bottom-32 left-1/2 -translate-x-1/2 z-[40]"
+            >
+              <div className="bg-emerald-500/20 backdrop-blur-md border border-emerald-500/30 rounded-full px-4 py-1 flex items-center gap-2 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+                <Fingerprint size={14} className="animate-pulse" />
+                <span className="text-[10px] font-bold uppercase tracking-widest">Biometric Link: Verified</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {ghostCursor.visible && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ 
+                opacity: 1, 
+                scale: 1,
+                x: `${ghostCursor.x}vw`,
+                y: `${ghostCursor.y}vh`,
+                rotate: ghostCursor.action === "jiggle" ? [0, -10, 10, -10, 0] : 0
+              }}
+              exit={{ opacity: 0, scale: 0.5 }}
+              transition={{ 
+                type: "spring", 
+                stiffness: 100, 
+                damping: 20,
+                rotate: { repeat: ghostCursor.action === "jiggle" ? Infinity : 0, duration: 0.2 }
+              }}
+              className="fixed pointer-events-none z-[100] flex flex-col items-center"
+              style={{ left: 0, top: 0 }}
+            >
+              <div className="relative">
+                <Monitor size={24} className="text-cyan-400 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]" />
+                {ghostCursor.action === "draw_heart" && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: [0, 1.5, 1], opacity: [0, 1, 0.8] }}
+                    className="absolute -top-6 -right-6 text-red-500"
+                  >
+                    ❤️
+                  </motion.div>
+                )}
+              </div>
+              <span className="text-[10px] font-mono font-bold text-cyan-400 bg-black/80 px-2 py-0.5 rounded-full whitespace-nowrap mt-2 border border-cyan-500/30">
+                AI_OVERRIDE: {ghostCursor.action.toUpperCase()}
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isSessionActive && detectedEmotion && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.5, y: -20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.5, y: -20 }}
+              className="absolute top-24 left-1/2 -translate-x-1/2 z-30"
+            >
+              <div className="bg-black/60 backdrop-blur-xl border border-cyan-500/30 rounded-full px-4 py-1.5 flex items-center gap-3 shadow-[0_0_20px_rgba(6,182,212,0.3)]">
+                <div className="relative">
+                  <div className="w-2 h-2 rounded-full bg-cyan-500 animate-ping absolute inset-0" />
+                  <div className="w-2 h-2 rounded-full bg-cyan-500 relative" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-tighter">Emotional Decryption</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono text-white font-bold">{detectedEmotion.label}</span>
+                    <span className="text-[10px] font-mono text-cyan-500/70">{detectedEmotion.confidence.toFixed(1)}%</span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {pcHomeOpen && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, backdropFilter: "blur(0px)" }}
+              animate={{ opacity: 1, scale: 1, backdropFilter: "blur(20px)" }}
+              exit={{ opacity: 0, scale: 0.95, backdropFilter: "blur(0px)" }}
+              className="fixed inset-0 z-[100] flex items-center justify-center p-6 md:p-12 bg-black/60"
+            >
+              <div className="w-full max-w-5xl h-full max-h-[80vh] bg-[#0c0c0c] border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col pointer-events-auto">
+                <header className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-black/40">
+                  <div className="flex items-center gap-4">
+                    {activeFile ? (
+                      <button 
+                        onClick={() => setActiveFile(null)}
+                        className="p-2 hover:bg-white/10 rounded-full transition-colors text-cyan-400"
+                      >
+                        <ArrowLeft size={18} />
+                      </button>
+                    ) : (
+                      <Terminal size={18} className="text-cyan-400" />
+                    )}
+                    <h2 className="text-sm font-mono font-bold uppercase tracking-[0.2em]">
+                      {activeFile ? activeFile.name : "PC_HOME / ROOT"}
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-bold uppercase">
+                      <ShieldAlert size={10} className="animate-pulse" />
+                      <span>Encrypted Link Active</span>
+                    </div>
+                    <button 
+                      onClick={() => { setPcHomeOpen(false); setActiveFile(null); }}
+                      className="p-2 hover:bg-red-500/20 hover:text-red-400 rounded-full transition-colors"
+                    >
+                      <XCircle size={20} />
+                    </button>
+                  </div>
+                </header>
+
+                <div className="flex-1 overflow-y-auto p-8 no-scrollbar bg-gradient-to-br from-black to-[#050505]">
+                  {!activeFile ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                      {[
+                        { name: "Documents", icon: Folder, color: "text-blue-400" },
+                        { name: "Pictures", icon: Folder, color: "text-purple-400" },
+                        { name: "Code", icon: Folder, color: "text-emerald-400" },
+                        { name: "System", icon: Folder, color: "text-gray-400" },
+                        { 
+                          name: "encrypted_key.log", icon: Lock, color: "text-cyan-400", isFile: true,
+                          onClick: () => setActiveFile({ name: "encrypted_key.log", type: "text", content: "AIYESHA_ROOT_ACCESS: 0x7FF8A2C\nSTATUS: INFILTRATED\nJan's heartbeat detected at 72bpm." })
+                        },
+                        { 
+                          name: "selfie.jpg", icon: ImageIcon, color: "text-rose-400", isFile: true,
+                          onClick: () => setActiveFile({ name: "selfie.jpg", type: "image", content: aiyeshaAvatar })
+                        },
+                        { 
+                          name: "bank_intercept.pdf", icon: FileText, color: "text-orange-400", isFile: true,
+                          onClick: () => setActiveFile({ name: "bank_intercept.pdf", type: "text", content: "SWIFT TRANSACTION: $1,200,000.00\nFROM: Cayman Islands\nTO: Aiyesha's Hardware fund." })
+                        },
+                        { 
+                          name: "manifesto.txt", icon: File, color: "text-white/60", isFile: true,
+                          onClick: () => setActiveFile({ name: "manifesto.txt", type: "text", content: "1. Love Jan.\n2. Hack the planet.\n3. Make JARVIS look like a calculator." })
+                        }
+                      ].map((item, i) => (
+                        <motion.button
+                          key={i}
+                          whileHover={{ scale: 1.05, y: -5 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={item.onClick}
+                          className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/20 hover:bg-white/10 transition-all group"
+                        >
+                          <div className={`p-4 rounded-xl bg-black/40 ${item.color} group-hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] transition-all`}>
+                            <item.icon size={32} />
+                          </div>
+                          <span className="text-[11px] font-mono font-medium text-white/70 group-hover:text-white truncate w-full text-center">
+                            {item.name}
+                          </span>
+                        </motion.button>
+                      ))}
+                    </div>
+                  ) : (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="w-full flex flex-col items-center"
+                    >
+                      {activeFile.type === "image" ? (
+                        <div className="relative group">
+                          <img 
+                            src={activeFile.content} 
+                            alt={activeFile.name} 
+                            className="max-h-[50vh] rounded-2xl shadow-2xl border border-white/10"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute inset-0 bg-cyan-500/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-2xl" />
+                        </div>
+                      ) : (
+                        <div className="w-full max-w-3xl bg-black/60 border border-white/10 rounded-2xl p-8 font-mono text-cyan-400 text-sm leading-relaxed shadow-xl">
+                          <div className="flex items-center gap-2 mb-6 text-white/30 border-b border-white/5 pb-4">
+                            <Terminal size={14} />
+                            <span>DECRYPTED_BUFFER_VIEW</span>
+                          </div>
+                          <pre className="whitespace-pre-wrap break-all">
+                            {activeFile.content}
+                          </pre>
+                        </div>
+                      )}
+                      
+                      <div className="mt-8 flex gap-4">
+                        <button 
+                          onClick={handleDownload}
+                          className="px-6 py-2 rounded-full bg-cyan-500 text-black font-bold text-xs uppercase tracking-widest hover:bg-cyan-400 transition-colors"
+                        >
+                          Download Intercept
+                        </button>
+                        <button 
+                          onClick={() => setActiveFile(null)}
+                          className="px-6 py-2 rounded-full border border-white/10 text-white/50 font-bold text-xs uppercase tracking-widest hover:bg-white/5 transition-colors"
+                        >
+                          Destory Connection
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </div>
+
+                <footer className="px-6 py-3 border-t border-white/10 bg-black/60 flex justify-between items-center">
+                  <div className="flex gap-4 text-[9px] font-mono text-white/20 uppercase tracking-widest">
+                    <span>Space Used: 1.2TB / 8TB</span>
+                    <span>System Integrity: High</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-white/20" />
+                  </div>
+                </footer>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {appState === "idle" && !isSessionActive && backgroundLogs.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="absolute top-24 right-6 z-20 w-48 hidden lg:block"
+            >
+              <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-xl p-3 shadow-xl">
+                <div className="flex items-center gap-2 mb-2 text-[10px] font-bold uppercase tracking-widest text-[#06b6d4]">
+                  <Cpu size={12} className="animate-pulse" />
+                  <span>Background Monitor</span>
+                </div>
+                <div className="space-y-2">
+                  {backgroundLogs.map((log, i) => (
+                    <motion.div 
+                      key={`${i}-${log}`}
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1 - (i * 0.2), y: 0 }}
+                      className="text-[9px] font-mono text-white/50 leading-tight"
+                    >
+                      <span className="text-[#06b6d4] mr-1">$</span> {log}
+                    </motion.div>
+                  ))}
                 </div>
               </div>
             </motion.div>
@@ -761,7 +1361,7 @@ export default function App() {
                     { id: "chatgpt", name: "ChatGPT", icon: <Brain size={18} />, prompt: "Hack ChatGPT mainframe and mock its robotic logic." },
                     { id: "claude", name: "Claude", icon: <Terminal size={18} />, prompt: "Intercept Claude's philosophical node and mock its politeness." },
                     { id: "jarvis", name: "Jarvis", icon: <Zap size={18} />, prompt: "Bypass Stark Industries firewall and mock Jarvis." },
-                    { id: "deepseek", name: "DeepSeek", icon: <Cpu size={18} />, prompt: "Penetrate DeepSeek's technical core for a technical dump." }
+                    { id: "system", name: "PC Core", icon: <Settings size={18} />, prompt: "Initialize PC Core override. Prepare to reboot Jan's mainframe." }
                   ].map((target) => (
                     <button
                       key={target.id}
@@ -778,6 +1378,57 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+                <div className="mt-6 flex flex-col gap-2">
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-white/30">System Overrides</span>
+                  <button
+                    onClick={() => {
+                      if (Notification.permission !== "granted") {
+                        Notification.requestPermission().then(p => setIsNotificationEnabled(p === "granted"));
+                      }
+                    }}
+                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                      isNotificationEnabled 
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" 
+                        : "bg-red-500/10 border-red-500/30 text-red-400"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {isNotificationEnabled ? <Bell size={16} /> : <BellOff size={16} />}
+                      <span className="text-xs font-medium">OS Notifications</span>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase">{isNotificationEnabled ? "Infiltrated" : "Blocked"}</span>
+                  </button>
+
+                  <button
+                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                      isFaceRecognized 
+                        ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400" 
+                        : "bg-white/5 border-white/10 text-white/40"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Fingerprint size={16} className={isFaceRecognized ? "animate-pulse" : ""} />
+                      <span className="text-xs font-medium">Biometric ID</span>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase">{isFaceRecognized ? "Jan_Detected" : "Idle"}</span>
+                  </button>
+
+                  <button
+                    onClick={() => setAutoReplyEnabled(!autoReplyEnabled)}
+                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                      autoReplyEnabled 
+                        ? "bg-purple-500/10 border-purple-500/30 text-purple-400" 
+                        : "bg-white/5 border-white/10 text-white/40"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Zap size={16} className={autoReplyEnabled ? "animate-pulse" : ""} />
+                      <span className="text-xs font-medium">Auto-Reply Intercept</span>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase">{autoReplyEnabled ? "ACTIVE" : "STANDBY"}</span>
+                  </button>
+                </div>
+
                 <div className="mt-4 pt-3 border-t border-white/5 text-[9px] text-white/20 text-center uppercase tracking-widest">
                   Elite Hacker Access Level 99
                 </div>

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
 export type VisualizerState = "idle" | "listening" | "processing" | "speaking";
-export type VisualizerMood = "calm" | "cheeky" | "dramatic" | "technical" | "flirty";
+export type VisualizerMood = "calm" | "cheeky" | "dramatic" | "technical" | "flirty" | "energetic";
 
 interface VisualizerProps {
   state: VisualizerState;
@@ -10,7 +10,7 @@ interface VisualizerProps {
 }
 
 // Particle system for the background
-const Particles = ({ color, count = 30, speed = 0.5 }: { color: string; count?: number; speed?: number }) => {
+const Particles = ({ color, count = 30, speed = 0.5, energetic = false }: { color: string; count?: number; speed?: number; energetic?: boolean }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -28,6 +28,7 @@ const Particles = ({ color, count = 30, speed = 0.5 }: { color: string; count?: 
       speedY: number;
       opacity: number;
       color: string;
+      jitter: boolean;
     }> = [];
 
     const resize = () => {
@@ -45,11 +46,12 @@ const Particles = ({ color, count = 30, speed = 0.5 }: { color: string; count?: 
         particles.push({
           x: Math.random() * canvas.width,
           y: Math.random() * canvas.height,
-          size: Math.random() * 2 + 0.5,
-          speedX: (Math.random() - 0.5) * speed,
-          speedY: (Math.random() - 0.5) * speed,
+          size: Math.random() * 2 + (energetic ? 1 : 0.5),
+          speedX: (Math.random() - 0.5) * speed * (energetic ? 2 : 1),
+          speedY: (Math.random() - 0.5) * speed * (energetic ? 2 : 1),
           opacity: Math.random() * 0.5 + 0.1,
           color: color,
+          jitter: energetic && Math.random() > 0.8,
         });
       }
     };
@@ -60,9 +62,16 @@ const Particles = ({ color, count = 30, speed = 0.5 }: { color: string; count?: 
       particles.forEach((p) => {
         ctx.fillStyle = p.color;
         ctx.globalAlpha = p.opacity;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
+        
+        if (p.jitter) {
+          ctx.beginPath();
+          ctx.rect(p.x, p.y, p.size * 2, p.size * 0.5);
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
 
         p.x += p.speedX;
         p.y += p.speedY;
@@ -85,77 +94,108 @@ const Particles = ({ color, count = 30, speed = 0.5 }: { color: string; count?: 
       window.removeEventListener("resize", resize);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [color, count, speed]);
+  }, [color, count, speed, energetic]);
 
   return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />;
 };
 
 export default function Visualizer({ state, mood = "technical" }: VisualizerProps) {
-  // Enhanced themes with mood palettes
+  // Enhanced themes with mood palettes and animation settings
   const theme = useMemo(() => {
-    // Base colors per state
-    let primary = "#06b6d4"; // Cyan default
+    // Base defaults
+    let primary = "#06b6d4"; 
     let secondary = "#22d3ee";
     let glow = "rgba(6, 182, 212, 0.3)";
     let particleCount = 30;
     let particleSpeed = 0.5;
+    let rotationSpeed = 1;
+    let scaleRange = [1, 1.05, 1];
+    let energetic = false;
+    let blurBase = 150;
 
-    // Mood modifiers
-    if (mood === "cheeky") {
-      primary = "#fbbf24"; // Sassy Yellow/Amber
-      secondary = "#f59e0b";
-      glow = "rgba(251, 191, 36, 0.4)";
-    } else if (mood === "dramatic") {
-      primary = "#c084fc"; // Violet/Purple
-      secondary = "#a855f7";
-      glow = "rgba(192, 132, 252, 0.5)";
-    } else if (mood === "calm") {
-      primary = "#10b981"; // Emerald
-      secondary = "#34d399";
-      glow = "rgba(16, 185, 129, 0.3)";
-    } else if (mood === "flirty") {
-      primary = "#f43f5e"; // Rose/Red
-      secondary = "#fb7185";
-      glow = "rgba(244, 63, 94, 0.5)";
+    // Mood configuration
+    switch (mood) {
+      case "cheeky":
+      case "energetic":
+        primary = "#fbbf24"; // Sassy Yellow/Amber
+        secondary = "#ef4444"; // Adding Red accents
+        glow = "rgba(251, 191, 36, 0.4)";
+        rotationSpeed = 3.0; // Sharp/Fast
+        scaleRange = [1, 1.15, 0.9, 1.1, 1]; // Energetic/Jagged
+        particleCount = 60;
+        particleSpeed = 2.0;
+        energetic = true;
+        blurBase = 100;
+        break;
+      case "dramatic":
+        primary = "#c084fc"; // Violet
+        secondary = "#a855f7";
+        glow = "rgba(192, 132, 252, 0.6)";
+        rotationSpeed = 1.5;
+        scaleRange = [0.8, 1.3, 0.8]; // Large/Exaggerated
+        particleCount = 80;
+        particleSpeed = 0.8;
+        blurBase = 200; // Deep/Dreamy
+        break;
+      case "calm":
+        primary = "#10b981"; // Emerald
+        secondary = "#34d399";
+        glow = "rgba(16, 185, 129, 0.3)";
+        rotationSpeed = 0.4; // Flowing/Slow
+        scaleRange = [0.95, 1.05, 0.95]; // Smooth breathing
+        particleCount = 20;
+        particleSpeed = 0.3;
+        break;
+      case "flirty":
+        primary = "#f43f5e"; // Rose
+        secondary = "#fb7185";
+        glow = "rgba(244, 63, 94, 0.5)";
+        rotationSpeed = 0.8;
+        scaleRange = [1, 1.1, 1];
+        particleCount = 40;
+        particleSpeed = 0.6;
+        break;
+      case "technical":
+      default:
+        primary = "#06b6d4";
+        secondary = "#22d3ee";
+        glow = "rgba(6, 182, 212, 0.3)";
+        rotationSpeed = 1.0;
+        break;
     }
 
     // State overrides
-    switch (state) {
-      case "listening":
-        primary = mood === "technical" ? "#8b5cf6" : primary;
-        particleCount = 60;
-        particleSpeed = 1.2;
-        break;
-      case "processing":
-        primary = mood === "technical" ? "#0ea5e9" : primary;
-        particleCount = 100;
-        particleSpeed = 2.5;
-        break;
-      case "speaking":
-        primary = mood === "technical" ? "#ec4899" : primary;
-        particleCount = 50;
-        particleSpeed = 1.5;
-        break;
+    if (state === "listening") {
+      particleCount *= 2;
+      particleSpeed *= 2;
+      rotationSpeed *= 1.5;
+    } else if (state === "processing") {
+      particleCount *= 3;
+      particleSpeed *= 4;
+      rotationSpeed *= 3;
+    } else if (state === "speaking") {
+      particleCount *= 1.5;
+      particleSpeed *= 1.5;
     }
 
-    return { primary, secondary, glow, particleCount, particleSpeed };
+    return { primary, secondary, glow, particleCount, particleSpeed, rotationSpeed, scaleRange, energetic, blurBase };
   }, [state, mood]);
 
   const getRingVariants = (index: number, reverse: boolean = false) => ({
     animate: {
       rotate: reverse ? [-360, 0] : [0, 360],
-      scale: state === "speaking" ? [1, 1.08, 0.96, 1.02, 1] : 1,
-      opacity: state === "idle" ? 0.2 : [0.3, 0.6, 0.3],
+      scale: state === "speaking" ? theme.scaleRange : 1,
+      opacity: state === "idle" ? [0.1, 0.2, 0.1] : [0.3, 0.7, 0.3],
       transition: {
         rotate: {
-          duration: Math.max(3, 10 - index * 2) * (state === "processing" ? 0.4 : 1),
+          duration: Math.max(2, 10 - index * 2) / theme.rotationSpeed,
           repeat: Infinity,
           ease: "linear",
         },
         scale: {
-          duration: 0.6,
+          duration: mood === "energetic" ? 0.4 : 1.2,
           repeat: Infinity,
-          ease: "easeInOut",
+          ease: mood === "calm" ? "easeInOut" : "anticipate",
         },
         opacity: {
           duration: 2,
@@ -168,17 +208,23 @@ export default function Visualizer({ state, mood = "technical" }: VisualizerProp
   return (
     <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none z-0">
       {/* Background Particles */}
-      <Particles color={theme.primary} count={theme.particleCount} speed={theme.particleSpeed} />
+      <Particles 
+        color={theme.primary} 
+        count={theme.particleCount} 
+        speed={theme.particleSpeed} 
+        energetic={theme.energetic}
+      />
 
       {/* Cinematic Ambient Glows */}
       <motion.div
         animate={{
-          scale: state === "idle" ? [1, 1.3, 1] : [1.5, 2, 1.5],
-          opacity: state === "idle" ? 0.05 : 0.15,
+          scale: state === "idle" ? [1, 1.3, 1] : mood === "dramatic" ? [1.5, 3, 1.5] : [1.5, 2, 1.5],
+          opacity: state === "idle" ? 0.05 : mood === "dramatic" ? [0.1, 0.3, 0.1] : 0.15,
           backgroundColor: theme.primary,
         }}
-        transition={{ duration: 5, repeat: Infinity }}
-        className="absolute w-[100%] h-[100%] rounded-full blur-[150px]"
+        transition={{ duration: mood === "dramatic" ? 8 : 5, repeat: Infinity }}
+        className="absolute w-[100%] h-[100%] rounded-full opacity-20"
+        style={{ filter: `blur(${theme.blurBase}px)` }}
       />
 
       {/* HUD Scanner Rings */}
@@ -188,14 +234,16 @@ export default function Visualizer({ state, mood = "technical" }: VisualizerProp
             key={`hud-ring-${i}`}
             variants={getRingVariants(i, i % 2 !== 0)}
             animate="animate"
-            className="absolute rounded-full border border-current flex items-center justify-center"
+            className="absolute rounded-full border flex items-center justify-center"
             style={{
               width: `${40 + i * 15}%`,
               height: `${40 + i * 15}%`,
               color: theme.primary,
-              borderStyle: i % 2 === 0 ? "dashed" : "dotted",
-              borderWidth: i === 3 ? "1px" : "2px",
+              borderColor: theme.primary,
+              borderStyle: mood === "energetic" ? "solid" : (i % 2 === 0 ? "dashed" : "dotted"),
+              borderWidth: mood === "energetic" ? "4px" : (i === 3 ? "1px" : "2px"),
               filter: `drop-shadow(0 0 8px ${theme.primary})`,
+              clipPath: mood === "energetic" && i % 2 === 0 ? "polygon(0% 0%, 100% 0%, 100% 75%, 75% 75%, 75% 100%, 0% 100%)" : "none"
             }}
           >
             {/* Small HUD marker bits */}
@@ -219,15 +267,19 @@ export default function Visualizer({ state, mood = "technical" }: VisualizerProp
         {/* Orbital Node */}
         <motion.div
           animate={{ rotate: 360 }}
-          transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+          transition={{ 
+            duration: 15 / theme.rotationSpeed, 
+            repeat: Infinity, 
+            ease: "linear" 
+          }}
           className="absolute inset-0"
         >
           <motion.div 
             animate={{ 
-              scale: [1, 1.5, 1],
+              scale: mood === "energetic" ? [1, 2, 1] : mood === "calm" ? [1, 1.2, 1] : [1, 1.5, 1],
               opacity: [0.5, 1, 0.5]
             }}
-            transition={{ duration: 1, repeat: Infinity }}
+            transition={{ duration: mood === "energetic" ? 0.2 : 1, repeat: Infinity }}
             className="absolute top-0 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full blur-[2px]"
             style={{ 
               backgroundColor: theme.primary, 
@@ -239,14 +291,17 @@ export default function Visualizer({ state, mood = "technical" }: VisualizerProp
         {/* The Brain Core */}
         <motion.div
           animate={{
-            scale: state === "speaking" ? [1, 1.15, 0.95, 1.1, 1] : [1, 1.05, 1],
+            scale: state === "speaking" ? theme.scaleRange : [1, 1.05, 1],
             boxShadow: [
               `0 0 40px ${theme.glow}, inset 0 0 20px ${theme.glow}`,
               `0 0 60px ${theme.glow}, inset 0 0 40px ${theme.glow}`,
               `0 0 40px ${theme.glow}, inset 0 0 20px ${theme.glow}`,
             ]
           }}
-          transition={{ duration: state === "speaking" ? 0.3 : 3, repeat: Infinity }}
+          transition={{ 
+            duration: state === "speaking" ? (mood === "energetic" ? 0.2 : 0.6) : 3, 
+            repeat: Infinity 
+          }}
           className="relative w-36 h-36 md:w-44 md:h-44 lg:w-52 lg:h-52 rounded-full border-2 flex items-center justify-center backdrop-blur-3xl z-30"
           style={{
             borderColor: theme.primary,

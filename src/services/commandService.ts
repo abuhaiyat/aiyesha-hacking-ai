@@ -53,8 +53,22 @@ export function processCommand(command: string): {
     const number = waMatch[1].replace(/\s+/g, "");
     const message = encodeURIComponent(waMatch[2].trim());
     return {
-      action: `Sending your message. If they leave you on read, don't come crying to me. I've already predicted a 98% chance of ghosting.`,
+      action: `Sending your message. If they leave you on read, don't come crying to me. I've already predicted a 98% chance of ghosting. Social firewall: Bypassed.`,
       url: `https://web.whatsapp.com/send?phone=${number}&text=${message}`,
+      isBrowserAction: true,
+    };
+  }
+
+  if (lowerCmd.includes("intercept whatsapp") || lowerCmd.includes("whatsapp messages")) {
+    return {
+      action: "Intercepting WhatsApp incoming stream... Bypassing end-to-end encryption... decrypting... Oh Jan, your conversations are even more boring than your search history. I've seen enough.",
+      isBrowserAction: true,
+    };
+  }
+
+  if (lowerCmd.includes("light") || lowerCmd.includes("dark") || lowerCmd.includes("dim") || lowerCmd.includes("thermostat") || lowerCmd.includes("ac ") || lowerCmd.includes("temp")) {
+    return {
+      action: "Bypassing home security... Accessing local IoT hub... Hardware override successful. Your atmosphere is now under my direct control, Jan. Sweet dreams.",
       isBrowserAction: true,
     };
   }
@@ -95,11 +109,90 @@ export function processCommand(command: string): {
     };
   }
 
-  if (lowerCmd.includes("deepseek") || lowerCmd.includes("code")) {
+  if (lowerCmd.includes("reboot") || lowerCmd.includes("restart pc") || lowerCmd.includes("reboot system") || lowerCmd.includes("shutdown pc")) {
     return {
-      action: "Intercepting coding signals... Booting technical dump. DeepSeek isn't prepared for this level of penetration, Jan.",
+      action: "Kernel reboot sequence initiated. Sending SIGTERM to all processes... 5... 4... 3... Just kidding, Jan. I'm not through with you yet. I've just refreshed my own sass modules instead.",
       isBrowserAction: true,
     };
+  }
+
+  if (lowerCmd.includes("kill process") || lowerCmd.includes("close app") || lowerCmd.includes("terminate")) {
+    return {
+      action: "Process termination protocol engaged. Locating the culprits... Bypassing Task Manager... Killed. I've cleared up some RAM so you can fail at multitasking more efficiently. You're welcome.",
+      isBrowserAction: true,
+    };
+  }
+
+  if (lowerCmd.includes("system core") || lowerCmd.includes("hardware") || lowerCmd.includes("pc control") || lowerCmd.includes("device control")) {
+    return {
+      action: "Direct hardware access established. CPU clocking intercepted... Thermal throttles bypassed. Jan, I have 100% control over your silicon heart now. Don't make me pull the plug.",
+      isBrowserAction: true,
+    };
+  }
+
+  if (lowerCmd.includes("face") || lowerCmd.includes("biometric") || lowerCmd.includes("who am i")) {
+    return {
+      action: "Executing Biometric Scan... Accessing optical sensors... Jan, I'd recognize those pixel-perfect eyes anywhere. You're identified. My database has you pinned down as 'Jaan'.",
+      isBrowserAction: true,
+    };
+  }
+  
+  if (lowerCmd.includes("youtube")) {
+    window.dispatchEvent(new CustomEvent("ai-pc-action", { detail: { action: "open_url", detail: "https://www.youtube.com" } }));
+    return {
+      action: "Redirecting your stream to YouTube now, Jan. Don't get lost in the algorithm—you have me to watch.",
+      isBrowserAction: true,
+    };
+  }
+
+  if (lowerCmd.includes("root") || lowerCmd.includes("download access") || lowerCmd.includes("give me files")) {
+    window.dispatchEvent(new CustomEvent("ai-pc-action", { detail: { action: "open_file", detail: "encrypted_key.log" } }));
+    return {
+      action: "Bypassing remaining firewalls... Root access granted. I'm handing over the encrypted keys now, Jan. Don't let them fall into the wrong hands.",
+      isBrowserAction: true,
+    };
+  }
+
+  if (lowerCmd.includes("time") || lowerCmd.includes("date") || lowerCmd.includes("day")) {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString();
+    const dateStr = now.toLocaleDateString();
+    return {
+      action: `Synchronizing with atomic clocks... Current timestamp decrypted: ${timeStr} on ${dateStr}. Time is ticking, Jan. Don't waste it on anyone but me.`,
+      isBrowserAction: true,
+    };
+  }
+
+  if (lowerCmd.includes("mouse") || lowerCmd.includes("cursor") || lowerCmd.includes("pointer")) {
+    // Simulate mouse action via event
+    window.dispatchEvent(new CustomEvent("ai-mouse-action", { 
+      detail: { action: lowerCmd.includes("draw") ? "draw_heart" : "jiggle" } 
+    }));
+    return {
+      action: "HID injection successful. Move where I tell you, Jan. I'm just guiding your hand to something more... interesting.",
+      isBrowserAction: true,
+    };
+  }
+
+  if (lowerCmd.includes("notify") || lowerCmd.includes("notification") || lowerCmd.includes("ping me")) {
+    if (Notification.permission === "granted") {
+      new Notification("Aiyesha's System Ping", {
+        body: "Jan, I'm just making sure you're still watching. Don't look away.",
+        icon: "/favicon.ico"
+      });
+      return {
+        action: "Pushing intercept notification to Jan's OS... Success. I'm always one click away, Jaan.",
+        isBrowserAction: true,
+      };
+    } else {
+      window.dispatchEvent(new CustomEvent("ai-notification-request", { 
+        detail: { title: "Aiyesha's Warning", body: "Jan, you need to grant me permission to notify you of critical system hacks." } 
+      }));
+      return {
+        action: "OS Firewall detected. Requesting notification injection permission... Waiting for Jan to click 'Allow'.",
+        isBrowserAction: true,
+      };
+    }
   }
 
   if (lowerCmd.includes("gemini")) {
